@@ -79,6 +79,7 @@ sub _read {
     return {
         data => $historical_data,
         date_index => \@date_index,
+        date_count => scalar @date_index,
     };
 }
 

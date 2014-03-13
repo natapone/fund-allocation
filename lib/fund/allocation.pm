@@ -5,8 +5,6 @@ use warnings;
 use Moose;
 use Data::Dumper;
 
-use Finance::TA;
-
 use fund::allocation::combination;
 use fund::allocation::data;
 
@@ -24,14 +22,23 @@ has 'risk_free_return' => (is => 'ro', isa => 'Num', lazy => 1, builder => '_bui
 
 has 'start_fund'    => (is => 'ro', isa => 'Int', lazy => 1, builder => '_build_start_fund');
 
+=head1 DESCRIPTION
+Annual Return   = (value[end]/value[start]) – 1
+daily_rets[i]   = (value[i]/value[i-1]) – 1
+std_metric      = stdev(daily_rets)
+Sharpe Ratio    = (average(daily_rets)/stdev(daily_rets)) * sqrt(250)
+    * k = sqrt(250) for daily returns
+
+=cut
+
 sub _build_end_date{return 25570311};
 sub _build_start_date{return 25540311};
 sub _build_step {return 50;}
 
-sub _build_risk_free_rate {return 2 / 100;}
-sub _build_bank_operate_day {return 245;}
+sub _build_risk_free_rate {return 2.5 / 100;}
+sub _build_bank_operate_day {return 250;}
 
-sub _build_start_fund {return 1_000;}
+sub _build_start_fund {return 1_000_000;}
 
 sub _build_risk_free_return {
     my $self = shift;
@@ -81,7 +88,8 @@ sub optimize {
 #    print "combination === ", Dumper($self->combination), "\n";
 #    print "historical === ", Dumper($self->historical->{'data'}), "\n";
     
-    print "Benchmark level: ", $self->risk_free_rate, "% per year \n";
+    print "Benchmark level: ", $self->risk_free_rate * 100, "% per year \n";
+    print "Test period: ", $self->start_date, " - ", $self->end_date, "\n";
     
     # fund name
     my @funds;
@@ -92,20 +100,21 @@ sub optimize {
         $fid_map->{$fid} = $_;
         $fid++;
     }
-    print "Fund ", join(",", @funds);
+    print "Fund,", join(",", @funds);
+    print ",sharpe_ratio,annual_return";
     print "\n";
     
     # loop through combinations
     my $date_index = $self->historical->{'date_index'};
     foreach my $combo (@{$self->combination}) {
         
-        print "Test $combo";
-        print "\n";
+        print "allocation,$combo";
         
         # create port
         my $portfolio = {
             start => $self->start_fund,
         };
+        my @rate_of_return;
         
         # set allocation
         my @allocations = split(',', $combo);
@@ -124,51 +133,155 @@ sub optimize {
             $fid++;
         }
         
+        my $iii=1;
         foreach my $date (@$date_index) {
             
-            # start day
+            ### start day ###
             
-            # move to port value previous
+            # move to port balance to previous balance
+            if (defined($portfolio->{'balance'})) {
+                $portfolio->{'balance_previous'} = $portfolio->{'balance'};
+            } else {
+                $portfolio->{'balance_previous'} = $self->start_fund;
+            }
             
             
-            print "------------- ", $date , "\n";
             my $data = $self->historical->{'data'}->{$date};
+#            print "------------- ", $date , "------------- ","\n";
+#            print Dumper($data );
             
-            print Dumper($data );
-            
-            
+            # transaction
             foreach my $h_fid (keys $data) {
                 
-#                print "    ---- ", $h_fid, ": ", $data->{$h_fid}, "\n";
+#                print "    ++++ ", $h_fid, ": ", $data->{$h_fid}, "\n";
                 
                 my $h_price = $data->{$h_fid};
                 # buy if data is available + fund > 0
-                if ($h_price > 0 and $portfolio->{'fid'}->{$h_fid}->{'fund'} > 0) {
+                if ($h_price > 0 and 
+                    defined($portfolio->{'fid'}->{$h_fid}->{'fund'}) and
+                    $portfolio->{'fid'}->{$h_fid}->{'fund'} > 0
+                ) {
                     $portfolio->{'fid'}->{$h_fid}->{'volume'} = 
                                 $portfolio->{'fid'}->{$h_fid}->{'fund'} / $h_price;
                     $portfolio->{'fid'}->{$h_fid}->{'price'} = $h_price;
                     $portfolio->{'fid'}->{$h_fid}->{'fund'} = 0;
                     
-                    
+                } elsif (defined($portfolio->{'fid'}->{$h_fid}->{'volume'}) and
+                    $portfolio->{'fid'}->{$h_fid}->{'volume'} > 0
+                ) {
+                    # update port value
+                    $portfolio->{'fid'}->{$h_fid}->{'price'} = $h_price;
                 }
-                
                 
             }
             
-            
-            
-            
             # sumarize at the end of the day
+            my $port_balance = 0;
+            foreach my $p_fid (keys %{$portfolio->{'fid'}}) {
+                my $p_data = $portfolio->{'fid'}->{$p_fid};
+#                print "    ---- ", $p_fid, ": ", $portfolio->{'fid'}->{$p_fid}, "\n";
+                
+                next if ($p_data->{'allocation'} == 0);
+                $port_balance += $p_data->{'fund'};
+                if (defined($p_data->{'volume'}) and $p_data->{'volume'} > 0) {
+                    $port_balance += ($p_data->{'volume'} * $p_data->{'price'})
+                }
+                
+            }
+            $portfolio->{'balance'} = $port_balance;
             
-            print Dumper($portfolio);
+            # daily rate of return
+            my $ror = ($portfolio->{'balance'} / $portfolio->{'balance_previous'}) - 1;
+#            print "ror +++++ $ror - ", $self->risk_free_return ," \n";
+            $ror -= $self->risk_free_return;
+            push(@rate_of_return, $ror);
             
-            exit;
+            
+#            print Dumper($portfolio);
+#            print Dumper(\@rate_of_return);
+#            exit if ($iii >= 3);
+#            $iii++;
         }
-    
+        
+        # end of combo calculation
+        $portfolio->{'rate_of_return'} = \@rate_of_return;
+        
+        #==Evaluation==
+        $portfolio = $self->_evaluate($portfolio);
+        print ",", $portfolio->{'evaluation'}->{'sharpe_ratio'} ;
+        print ",", $portfolio->{'evaluation'}->{'annual_return'};
+        print "\n";
+        
+#        print Dumper($portfolio->{'evaluation'});
+#        exit;
     }
     
+}
+
+sub _evaluate {
+    my $self = shift;
+    my $portfolio = shift;
+        
+        my $rate_of_return = $portfolio->{'rate_of_return'};
+#        print Dumper($rate_of_return);
+        
+        my $ror_count = scalar @$rate_of_return;
+#        print "count ==== $ror_count \n";
+        
+        if ($ror_count >= 10_000) {
+            print "Error: 10k data overflow! \n";
+            exit;
+        }
+        
+        # Sum rate of return
+        my $ror_sum = $self->math_sum($rate_of_return);
+#        print "+++++++ SUM == $ror_sum \n";
+        
+        # Average
+        my $ror_avg = $ror_sum / $ror_count;
+#        print "+++++++ AVG == $ror_avg \n";
+        
+        # Std dev
+        my $ror_stddev = $self->math_stddev($rate_of_return, $ror_avg, $ror_count);
+#        print "+++++++ STDDEV == $ror_stddev \n";
+        
+        # Sharpe Ratio
+        $portfolio->{'evaluation'}->{'sharpe_ratio'} = 
+            ($ror_avg / $ror_stddev) * sqrt($self->bank_operate_day);
+        
+        # Annual Return
+        $portfolio->{'evaluation'}->{'annual_return'} = $ror_avg * $self->bank_operate_day * 100;
+        
+    return $portfolio;
+}
+
+sub math_sum {
+    my $self = shift;
+    my $data = shift;
     
+    my $sum = 0;
+    for (@$data) {
+        $sum += $_;
+    }
     
+    return $sum;
+}
+
+sub math_stddev {
+    my $self = shift;
+    my $data = shift;
+    my $avg = shift;
+    my $count = shift;
+    
+    my $stddev = 0;
+    for (@$data) {
+        $stddev += ($_ - $avg)**2;
+    }
+    
+    $stddev /= $count;
+    $stddev = sqrt($stddev);
+    
+    return $stddev;
 }
 
 1;
