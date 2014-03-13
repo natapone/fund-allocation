@@ -3,10 +3,25 @@ use strict;
 use warnings;
 
 use Data::Dumper;
-#use fund::allocation::historical;
-#use fund::allocation::combination;
-
 use fund::allocation;
+
+=head1
+Fund
+1;ทหารไทยธนรัฐ ;ต่ำ 
+2;ทหารไทยธนบดี ;ต่ำ 
+3;ทหารไทยธนพลัส;ต่ำ – ปานกลาง
+4;ทหารไทยธนไพศาล;ต่ำ – ปานกลาง
+5;ทหารไทยจัดทัพลงทุนระยะสั้น;ต่ำ – ปานกลาง
+6;ทหารไทยจัดทัพลงทุนระยะกลาง;ต่ำ – ปานกลาง
+7;ทหารไทยจัดทัพลงทุนระยะยาว;ต่ำ – ปานกลาง
+8;ทหารไทย SET 50;ค่อนข้างสูง
+9;Jumbo 25;ค่อนข้างสูง
+10;ทหารไทย World Equity Index;สูง
+11;ทหารไทย Emerging Markets Equity Index;สูง
+12;ทหารไทย China Equity Index;สูง
+13;ทหารไทย โกลด์ สิงคโปร์ ฟันด์;สูง
+
+=cut
 
 my $fund = {
     1 => {
@@ -49,14 +64,14 @@ my $fund = {
         'min' => 0,
         'max' => 10,
     },
-    11 => {
-        'min' => 0,
-        'max' => 10,
-    },
-    12 => {
-        'min' => 0,
-        'max' => 10,
-    },
+#    11 => {
+#        'min' => 0,
+#        'max' => 10,
+#    },
+#    12 => {
+#        'min' => 0,
+#        'max' => 10,
+#    },
     13 => {
         'min' => 0,
         'max' => 10,
@@ -64,7 +79,8 @@ my $fund = {
 };
 
 my $allocation = fund::allocation->new(
-    start_date  => 25560324,
+#    start_date  => 25540101,
+    start_date  => 25570101,
     end_date    => 25570311,
     fund        => $fund,
     step        => 10,

@@ -67,6 +67,7 @@ sub _build_historical {
     my $data_engine = fund::allocation::data->new(
         start_date  => $self->start_date,
         end_date    => $self->end_date,
+        fund        => $self->fund,
     );
     
     return $data_engine->historical;
@@ -87,7 +88,7 @@ sub optimize {
     
 #    print "combination === ", Dumper($self->combination), "\n";
 #    print "historical === ", Dumper($self->historical->{'data'}), "\n";
-    
+#    exit;
     print "Benchmark level: ", $self->risk_free_rate * 100, "% per year \n";
     print "Test period: ", $self->start_date, " - ", $self->end_date, "\n";
     
@@ -102,6 +103,7 @@ sub optimize {
     }
     print "Fund,", join(",", @funds);
     print ",sharpe_ratio,annual_return";
+    print ",sharpe_ratio_sort,annual_return_sort";
     print "\n";
     
     # loop through combinations
@@ -196,7 +198,6 @@ sub optimize {
             $ror -= $self->risk_free_return;
             push(@rate_of_return, $ror);
             
-            
 #            print Dumper($portfolio);
 #            print Dumper(\@rate_of_return);
 #            exit if ($iii >= 3);
@@ -210,6 +211,8 @@ sub optimize {
         $portfolio = $self->_evaluate($portfolio);
         print ",", $portfolio->{'evaluation'}->{'sharpe_ratio'} ;
         print ",", $portfolio->{'evaluation'}->{'annual_return'};
+        print ",", int($portfolio->{'evaluation'}->{'sharpe_ratio'} + 0.5) ; # round
+        print ",", int($portfolio->{'evaluation'}->{'annual_return'} + 0.5); # round
         print "\n";
         
 #        print Dumper($portfolio->{'evaluation'});
@@ -247,10 +250,13 @@ sub _evaluate {
         
         # Sharpe Ratio
         $portfolio->{'evaluation'}->{'sharpe_ratio'} = 
-            ($ror_avg / $ror_stddev) * sqrt($self->bank_operate_day);
+            sprintf("%.5f", 
+            ($ror_avg / $ror_stddev) * sqrt($self->bank_operate_day));
         
         # Annual Return
-        $portfolio->{'evaluation'}->{'annual_return'} = $ror_avg * $self->bank_operate_day * 100;
+        $portfolio->{'evaluation'}->{'annual_return'} = 
+            sprintf("%.5f", 
+            $ror_avg * $self->bank_operate_day * 100);
         
     return $portfolio;
 }
