@@ -38,7 +38,7 @@ sub _build_step {return 50;}
 sub _build_risk_free_rate {return 2.5 / 100;}
 sub _build_bank_operate_day {return 250;}
 
-sub _build_start_fund {return 1_000_000;}
+sub _build_start_fund {return 100;}
 
 sub _build_risk_free_return {
     my $self = shift;
@@ -83,6 +83,28 @@ sub _build_combination {
     return $combo_engine->gen;
 }
 
+sub plot {
+    my $self = shift;
+    
+    my $portfolios = $self->optimize();
+#    print Dumper($portfolio );
+    
+    
+    foreach my $combo (keys %$portfolios) {
+        print "------ Plot $combo ------\n";
+        my $rate_of_return = $portfolios->{$combo}->{'rate_of_return'};
+        my $current_balance = $portfolios->{$combo}->{'start'};
+        print $current_balance, "\n";
+        foreach my $ror (@$rate_of_return) {
+#            print "-------------- $ror \n";
+            $current_balance *= ($ror + 1);
+            print $current_balance, "\n";
+        }
+        
+    }
+    
+}
+
 sub optimize {
     my $self = shift;
     
@@ -107,6 +129,7 @@ sub optimize {
     print "\n";
     
     # loop through combinations
+    my $portfolio_allocation;
     my $date_index = $self->historical->{'date_index'};
     foreach my $combo (@{$self->combination}) {
         
@@ -215,10 +238,12 @@ sub optimize {
         print ",", int($portfolio->{'evaluation'}->{'annual_return'} + 0.5); # round
         print "\n";
         
+        $portfolio_allocation->{$combo} = $portfolio;
 #        print Dumper($portfolio->{'evaluation'});
 #        exit;
     }
     
+    return $portfolio_allocation;
 }
 
 sub _evaluate {
@@ -230,11 +255,6 @@ sub _evaluate {
         
         my $ror_count = scalar @$rate_of_return;
 #        print "count ==== $ror_count \n";
-        
-        if ($ror_count >= 10_000) {
-            print "Error: 10k data overflow! \n";
-            exit;
-        }
         
         # Sum rate of return
         my $ror_sum = $self->math_sum($rate_of_return);
